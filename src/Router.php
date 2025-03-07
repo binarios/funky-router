@@ -1,69 +1,78 @@
-<?php declare(strict_types=1);
+<?php
 
 namespace FunkyRouter;
 
+use Exception;
+
 class Router
 {
-    private const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE'];
+    protected array $routes = [];
+    protected ?AbstractRoute $defaultRoute = null;
 
-    private array $routes = [];
-    private string $requestUri;
-    private string $requestMethod;
-    private RouterError $errorHandler;
-
-    public function __construct()
+    public function get(string $path): FluentRoute
     {
-        $this->errorHandler = new RouterError();
-        $this->requestUri = $this->getRequestUri();
-        $this->requestMethod = $this->getRequestMethod();
+        return $this->addRoute('GET', $path);
     }
 
-    private function getRequestUri(): string
+    public function post(string $path): FluentRoute
     {
-        $uri = $_SERVER['REQUEST_URI'] ?? '/';
-        $uri = parse_url($uri, PHP_URL_PATH) ?: '/';
-        return rtrim($uri, '/') ?: '/';
+        return $this->addRoute('POST', $path);
     }
 
-    public function setRequestUri(string $uri): void
+    public function patch(string $path): FluentRoute
     {
-        $uri = parse_url($uri, PHP_URL_PATH) ?: '/';
-        $this->requestUri = rtrim($uri, '/') ?: '/';
+        return $this->addRoute('PATCH', $path);
     }
 
-    private function getRequestMethod(): string
+    public function put(string $path): FluentRoute
     {
-        return $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        return $this->addRoute('PUT', $path);
     }
 
-    public function setRequestMethod(string $method): void
+    public function delete(string $path): FluentRoute
     {
-        $method = strtoupper($method);
-        if (!$this->isMethodAllowed($method)) {
-            $this->errorHandler->addError("<b>Method:</b> <mark>{$method}</mark> is not allowed");
+        return $this->addRoute('DELETE', $path);
+    }
+
+    protected function addRoute(string $method, string $path): FluentRoute
+    {
+        $fluent = new FluentRoute($path);
+        $this->routes[$method][$path] = $fluent;
+        return $fluent;
+    }
+
+    public function setDefaultRoute(AbstractRoute $route): self
+    {
+        $this->defaultRoute = $route;
+        return $this;
+    }
+
+    public function dispatch(string $uri, string $method, array $request = []): mixed
+    {
+        foreach ($this->routes[$method] ?? [] as $path => $route) {
+            if ($this->match($path, $uri, $params)) {
+                $request = array_merge($request, $params);
+                return $route->getRoute()->run($request);
+            }
         }
-        $this->requestMethod = $method;
+
+        if ($this->defaultRoute !== null) {
+            return $this->defaultRoute->run($request);
+        }
+
+        throw new Exception("Keine passende Route gefunden und keine Default-Route gesetzt.");
     }
 
-    private function isMethodAllowed(string $method): bool
+    protected function match(string $path, string $uri, &$params): bool
     {
-        return in_array($method, self::ALLOWED_METHODS, true);
-    }
+        $path = preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[a-zA-Z0-9_-]+)', $path);
+        $pattern = "#^$path$#";
 
-    private function checkError(): bool
-    {
-        if ($this->errorHandler->hasErrors()) {
-            $this->errorHandler->showErrors();
+        if (preg_match($pattern, $uri, $matches)) {
+            $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
             return true;
         }
+
         return false;
-    }
-
-    # Auflösen der Routen
-    public function dispatch(): void
-    {
-        if ($this->checkError()) exit;
-
-        echo "Dispatching route for {$this->requestMethod} => {$this->requestUri}" . PHP_EOL;
     }
 }
