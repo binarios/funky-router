@@ -1,0 +1,15 @@
+{
+    "name": "jaypiii/funky-router",
+    "autoload": {
+        "psr-4": {
+            "FunkyRouter\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "binarios",
+            "email": "behrens.de@icloud.com"
+        }
+    ],
+    "require": {}
+}
